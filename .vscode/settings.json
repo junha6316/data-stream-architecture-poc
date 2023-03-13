@@ -1,0 +1,9 @@
+{
+  "python.pipenvPath": "/Users/parkjunhada/.local/share/virtualenvs/data-stream-architecture-poc-6wDVwl34/bin/python",
+  "python.analysis.extraPaths": [
+    "/Users/parkjunhada/.local/share/virtualenvs/data-stream-architecture-poc-6wDVwl34/lib/python3.9/site-packages"
+  ],
+  "files.watcherExclude": {
+    "**/target": true
+  }
+}
