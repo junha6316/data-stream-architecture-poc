@@ -1,7 +1,7 @@
 FROM bitnami/spark:latest
 
-COPY app.py /opt/spark/work-dir/app.py
+COPY ./data-analysis.py /opt/spark/work-dir/data-analysis.py
 COPY requirements.txt /opt/spark/work-dir/requirements.txt
 
 RUN pip install -r /opt/spark/work-dir/requirements.txt
-RUN python app.py
+RUN python data-analysis.py

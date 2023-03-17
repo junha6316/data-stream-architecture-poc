@@ -7,9 +7,10 @@ name = "pypi"
 kafka-python = "*"
 numpy = "*"
 pyspark = "*"
-cassandra-driver = "*"
+
 
 [dev-packages]
+black = "*"
 
 [requires]
 python_version = "3.9"
