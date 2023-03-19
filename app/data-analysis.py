@@ -40,7 +40,8 @@ if __name__ == "__main__":
     spark = (
         SparkSession.builder.appName("Stream Handler")
         .config("spark.jars.packages", ",".join(packages))
-        .config("spark.cassandra.connection.host", "localhost")
+        .config("spark.cassandra.connection.host", "cassandra")
+        .config("spark.cassandra.connection.port", "9042")
         .getOrCreate()
     )
     # Read from Kafka
@@ -53,11 +54,11 @@ if __name__ == "__main__":
 
     # Convert bytes to string and parse JSON
     raw_df = input_df.selectExpr("CAST(value AS STRING)").alias("value")
-    expanded_df = raw_df.select(from_json(col("value"), schema).alias("json")).select(
-        col("json.device").alias("device"),
-        col("json.temp").alias("temp"),
-        col("json.humd").alias("humd"),
-        col("json.pres").alias("pres"),
+    expanded_df = raw_df.select(
+        split(col("value"), ",").getItem(1).alias("device"),
+        split(col("value"), ",").getItem(2).cast("float").alias("temp"),
+        split(col("value"), ",").getItem(3).cast("float").alias("humd"),
+        split(col("value"), ",").getItem(4).cast("float").alias("pres"),
     )
 
     # Group by and aggregate
@@ -86,7 +87,10 @@ if __name__ == "__main__":
             lambda batch_df, batch_id: batch_df.write.format(
                 "org.apache.spark.sql.cassandra"
             )
-            .options(table="weather_data", keyspace="my_keyspace")
+            .option(
+                "spark.cassandra.output.consistency.level", "LOCAL_ONE"
+            )  # 낮은 수준의 일관성을 보장 LOCAL_QUARUM의 경우 최소 2개이상의 replica가 존재해야함
+            .options(table="weather", keyspace="stuff")
             .mode("append")
             .save()
         )

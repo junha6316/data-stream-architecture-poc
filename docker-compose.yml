@@ -67,7 +67,7 @@ services:
 
     volumes:
       - "./app:/app"
-    # command: /app/start.sh
+    command: /app/start.sh
     depends_on:
       - kafka
       - cassandra
