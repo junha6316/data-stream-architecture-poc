@@ -34,8 +34,14 @@ services:
 
   cassandra:
     image: cassandra
+    container_name: cassandra
     ports:
       - "9042:9042"
+    volumes:
+      - ./data:/var/lib/cassandra
+      - ./init.cql:/init.cql
+
+    command: ["sh", "-c", "cassandra -f -R && sleep 10 && cqlsh -f /init.cql"]
 
   spark-master:
     image: bitnami/spark:latest
