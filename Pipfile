@@ -8,6 +8,7 @@ kafka-python = "*"
 numpy = "*"
 pyspark = "*"
 faker = "*"
+redis = "*"
 
 [dev-packages]
 black = "*"
