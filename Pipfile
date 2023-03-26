@@ -7,7 +7,7 @@ name = "pypi"
 kafka-python = "*"
 numpy = "*"
 pyspark = "*"
-
+faker = "*"
 
 [dev-packages]
 black = "*"
