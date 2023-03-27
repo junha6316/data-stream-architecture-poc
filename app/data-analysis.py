@@ -1,104 +1,106 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.streaming import *
 from pyspark.sql.types import *
-from pyspark.sql.functions import udf
 
-from uuid import uuid1
-import json
+# Create a SparkSession
+spark = SparkSession.builder.appName("crm-analysis").getOrCreate()
 
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import avg, udf, col
-from pyspark.sql.types import StringType
+# Define the schema for the CRM messages
+crm_message_schema = StructType([StructField("message_id", IntegerType(), True)])
 
+# Define the window duration for the analysis
+window_duration = "14 days"
 
-# define the schema for the incoming data
-schema = StructType(
-    [
-        StructField("device", StringType(), True),
-        StructField("temp", DoubleType(), True),
-        StructField("humd", DoubleType(), True),
-        StructField("pres", DoubleType(), True),
-    ]
+# Read CRM message ids from Kafka
+crm_message_ids = (
+    spark.readStream.format("kafka")
+    .option("kafka.bootstrap.servers", "localhost:9092")
+    .option("subscribe", "crm_message")
+    .option("startingOffsets", "earliest")
+    .load()
+    .select(col("key").cast("int").alias("message_id"))
 )
 
-
-# define a function to create UUIDs
-def make_uuid():
-    return str(uuid1())
-
-
-# sudo로 실행시켜야함
-if __name__ == "__main__":
-    packages = [
-        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.2",
-        "org.apache.kafka:kafka-clients:3.2.1",
-        "com.datastax.spark:spark-cassandra-connector_2.12:3.1.0",
-    ]
-
-    # Create Spark session
-    spark = (
-        SparkSession.builder.appName("Stream Handler")
-        .config("spark.jars.packages", ",".join(packages))
-        .config("spark.cassandra.connection.host", "cassandra")
-        .config("spark.cassandra.connection.port", "9042")
-        .getOrCreate()
+# Read CRM messages from Redis and filter by message ID
+crm_messages = (
+    spark.read.format("org.apache.spark.sql.redis")
+    .option("table", "crm_messages")
+    .option("key.column", "message_id")
+    .option(
+        "predicates",
+        f"message_id IN ({crm_message_ids.select('message_id').distinct().collect()})",
     )
-    # Read from Kafka
-    input_df = (
-        spark.readStream.format("kafka")
-        .option("kafka.bootstrap.servers", "kafka:9092")
-        .option("subscribe", "weather")
-        .load()
+    .load()
+)
+
+# Read product data from Redis and filter by target product ID
+product_data = (
+    spark.read.format("org.apache.spark.sql.redis")
+    .option("table", "product_data")
+    .option("key.column", "id")
+    .option(
+        "predicates",
+        f"id IN ({crm_messages.select('target_product_id').distinct().collect()})",
     )
+    .load()
+)
 
-    # Convert bytes to string and parse JSON
-    raw_df = input_df.selectExpr("CAST(value AS STRING)").alias("value")
-    expanded_df = raw_df.select(
-        split(col("value"), ",").getItem(1).alias("device"),
-        split(col("value"), ",").getItem(2).cast("float").alias("temp"),
-        split(col("value"), ",").getItem(3).cast("float").alias("humd"),
-        split(col("value"), ",").getItem(4).cast("float").alias("pres"),
+# Read purchase data from Redis and filter by target product ID and purchase date
+purchase_data = (
+    spark.read.format("org.apache.spark.sql.redis")
+    .option("table", "purchase_data")
+    .option("key.column", "id")
+    .option(
+        "predicates",
+        f"product_id IN ({crm_messages.select('target_product_id').distinct().collect()})",
     )
+    .load()
+    .filter(col("created_at").between(window.start, window.end))
+)
 
-    # Group by and aggregate
-    summary_df = expanded_df.groupBy("device").agg(
-        avg("temp"), avg("humd"), avg("pres")
+# Read user data from Redis and join with purchase data
+user_data = (
+    spark.read.format("org.apache.spark.sql.redis")
+    .option("table", "user_data")
+    .option("key.column", "phone_number")
+    .option(
+        "predicates",
+        f"phone_number IN ({crm_messages.select('phone_number').distinct().collect()})",
     )
-
-    # Create a UDF that generates UUIDs
-    def make_uuid():
-        return str(uuid1())
-
-    make_uuid_udf = udf(make_uuid, StringType())
-
-    # Add UUIDs and rename columns
-    summary_with_ids = (
-        summary_df.withColumn("uuid", make_uuid_udf())
-        .withColumnRenamed("avg(temp)", "temp")
-        .withColumnRenamed("avg(humd)", "humd")
-        .withColumnRenamed("avg(pres)", "pres")
+    .load()
+    .withColumnRenamed("phone_number", "crm_phone_number")
+    .join(
+        purchase_data.select("user_id", "crm_phone_number"), "crm_phone_number", "inner"
     )
+    .withColumnRenamed("user_id", "id")
+    .drop("crm_phone_number")
+)
 
-    # Write DataFrame to Cassandra
-    query = (
-        summary_with_ids.writeStream.trigger(processingTime="5 seconds")
-        .foreachBatch(
-            lambda batch_df, batch_id: batch_df.write.format(
-                "org.apache.spark.sql.cassandra"
-            )
-            .option(
-                "spark.cassandra.output.consistency.level", "LOCAL_ONE"
-            )  # 낮은 수준의 일관성을 보장 LOCAL_QUARUM의 경우 최소 2개이상의 replica가 존재해야함
-            .options(table="weather", keyspace="stuff")
-            .mode("append")
-            .save()
-        )
-        .outputMode("update")
-        .start()
-    )
+# Join CRM messages with user, product, and purchase data
+joined_data = (
+    crm_messages.join(user_data, "phone_number")
+    .join(product_data, "id")
+    .join(purchase_data, "user_id", "inner")
+)
 
-    # Until KeyboardInterrupt
-    query.awaitTermination()
+# Define the window for the analysis
+window = window(col("created_at"), window_duration)
 
-    # wait for the query to terminate
+# Perform analysis on the data
+crm_purchase_counts = joined_data.groupBy("target_product_id").agg(
+    countDistinct(
+        when(col("created_at").between(window.start, window.end), col("user_id"))
+    ).alias("crm_purchase_count"),
+    sum(when(col("created_at").between(window.start, window.end), col("price"))).alias(
+        "crm_total_purchase_value"
+    ),
+)
+
+# Write the results back to Redis
+crm_purchase_counts.write.format("org.apache.spark.sql.redis").option(
+    "table", "crm_purchase_counts"
+).option("key.column", "target_product_id").mode("overwrite").save()
+
+# Start the streaming query
+query = crm_purchase_counts.writeStream.format("console").outputMode("complete").start()
+query.awaitTermination()
