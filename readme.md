@@ -1,3 +1,10 @@
+### Requirements
+
+- scala 2.12
+- maven
+- docker-compose
+- pipenv
+
 ### 테스트 방법
 
 ```shell
@@ -79,3 +86,29 @@ ex) 타임 윈도우 변경
    10만건 / (2000건/1초) = 50초
    100만건 / (2000건/1초) = 500초
 2. 스파크 운영
+
+## 기록용
+
+- spark-redis를 사용하기 위해서는 spark-redis를 github에서 다운로드 받은 후 maven으로 빌드해 jar 형태로 사용
+  https://github.com/RedisLabs/spark-redis/blob/master/doc/getting-started.md 참고
+
+```
+git clone https://github.com/RedisLabs/spark-redis.git
+cd spark-redis
+mvn clean package -DskipTests
+```
+
+- 빌드시 아래와 같은 오류 발생시 java version 문제, Java 8 사용
+  scala.reflect.internal.MissingRequirementError: object java.lang.Object in compiler mirror not found.
+  https://github.com/davidB/scala-maven-plugin/issues/215
+
+- jars
+  spark-redis, jedis 버전 확인
+
+* 아니.. packages,jars 설정 너무 빡센거 아니냐고..
+* 종속성 잡는게 쉽지 않다
+
+* 일단 최신 버전은 거르고 본다.
+
+
+* predicate 
