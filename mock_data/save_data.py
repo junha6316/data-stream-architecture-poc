@@ -23,7 +23,9 @@ def save_json_to_redis(table_name: str, file_path: str):
     for item in data:
         try:
             item_json = json.dumps(item)
-            r.hset(table_name, item["id"], item_json)
+            for key in item.keys():
+                r.hset(f"{table_name}:{item['id']}", key, item[key])
+
         except (KeyError, TypeError):
             print(f"Error: Invalid JSON item {item}")
 
