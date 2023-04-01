@@ -28,11 +28,12 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CREATE_TOPICS: "crm_message:1:1"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
   spark-master:
-    image: bitnami/spark:latest
+    image: bitnami/spark:3.0.0
     environment:
       - SPARK_MODE=master
       - SPARK_RPC_AUTHENTICATION_ENABLED=no
@@ -45,7 +46,7 @@ services:
       - "7077:7077"
 
   spark-worker:
-    image: bitnami/spark:latest
+    image: bitnami/spark:3.0.0
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -57,13 +58,12 @@ services:
       - spark-master
 
   spark-app:
-    image: bitnami/spark:latest
-
+    image: bitnami/spark:3.0.0
+    user: root
     volumes:
       - "./app:/app"
     command: /app/start.sh
     depends_on:
       - kafka
-      - cassandra
       - spark-master
       - spark-worker
