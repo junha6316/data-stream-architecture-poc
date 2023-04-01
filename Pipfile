@@ -6,7 +6,7 @@ name = "pypi"
 [packages]
 kafka-python = "*"
 numpy = "*"
-pyspark = "*"
+pyspark = "3.0.0"
 faker = "*"
 redis = "*"
 
